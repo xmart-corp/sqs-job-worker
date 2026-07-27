@@ -1,0 +1,57 @@
+[project]
+name = "sqs-job-worker"
+version = "0.1.0"
+description = "A framework-agnostic resident worker for consuming jobs from Amazon SQS"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "XMart Inc." }]
+requires-python = ">=3.11"
+keywords = ["sqs", "aws", "amazon-sqs", "worker", "job-queue", "background-jobs"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Typing :: Typed",
+]
+dependencies = [
+    # ReceiveMessage's MessageSystemAttributeNames parameter requires botocore 1.34.101.
+    "boto3>=1.34.101",
+    "botocore>=1.34.101",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+newrelic = ["newrelic>=9"]
+sentry = ["sentry-sdk>=2"]
+otel = ["opentelemetry-api>=1.20"]
+
+[project.urls]
+Repository = "https://github.com/xmart-corp/sqs-job-worker"
+Issues = "https://github.com/xmart-corp/sqs-job-worker/issues"
+Changelog = "https://github.com/xmart-corp/sqs-job-worker/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "moto>=5",
+    "ruff",
+    "ty",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+exclude = [".github", "AGENTS.md", "CLAUDE.md", "uv.lock"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

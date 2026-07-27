@@ -1,0 +1,45 @@
+line-length = 160
+
+[format]
+skip-magic-trailing-comma = true
+
+[lint]
+select = [
+    "F",
+    "E",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "FURB",
+    "PERF",
+    "A",
+    "ARG",
+    "B",
+    "C4",
+    "PIE",
+    "PTH",
+    "RET",
+    "RSE",
+    "SIM",
+    "TID",
+    "PL",
+    "RUF",
+]
+ignore = [
+    "RUF001", "RUF002", "RUF003",
+    "PLR2004",
+    "PLC0415",
+]
+
+[lint.isort]
+split-on-trailing-comma = false
+
+[lint.per-file-ignores]
+"tests/**" = ["ARG", "PLW0108"]
+
+[lint.pylint]
+max-args = 10
+max-returns = 14
+max-branches = 16
+max-statements = 70
