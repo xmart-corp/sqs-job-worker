@@ -1,7 +1,7 @@
 import contextlib
 from collections.abc import Callable
+from typing import Any
 
-import structlog
 from opentelemetry import propagate, trace
 
 from sqs_job_worker.job_middleware import Job, JobMiddleware
@@ -31,27 +31,16 @@ class OTelMiddleware(JobMiddleware):
                 job.trace_headers[key] = value
         return call_next(job)
 
-    def consume(self, job: Job, call_next: Callable[[Job], None]) -> None:
-        try:
-            attributes = {"messaging.system": "aws_sqs", "messaging.destination.name": job.queue, "messaging.operation.type": "process"}
-            if job.message_id:
-                attributes["messaging.message.id"] = job.message_id
-            span_manager = self._tracer.start_as_current_span(
-                job.job_type, context=propagate.extract(job.trace_headers), kind=trace.SpanKind.CONSUMER, attributes=attributes
-            )
-            span = span_manager.__enter__()
-        except Exception:
-            return call_next(job)
-        try:
-            structlog.contextvars.bind_contextvars(**self._span_ids(span))
-            call_next(job)
-        except BaseException as error:
-            with contextlib.suppress(Exception):
-                span_manager.__exit__(type(error), error, error.__traceback__)
-            raise
-        else:
-            with contextlib.suppress(Exception):
-                span_manager.__exit__(None, None, None)
+    def consume_transaction(self, job: Job) -> Any:
+        attributes = {"messaging.system": "aws_sqs", "messaging.destination.name": job.queue, "messaging.operation.type": "process"}
+        if job.message_id:
+            attributes["messaging.message.id"] = job.message_id
+        return self._tracer.start_as_current_span(
+            job.job_type, context=propagate.extract(job.trace_headers), kind=trace.SpanKind.CONSUMER, attributes=attributes
+        )
+
+    def linking_ids(self, _job: Job) -> dict:
+        return self._span_ids(trace.get_current_span())
 
     @staticmethod
     def _span_ids(span) -> dict:

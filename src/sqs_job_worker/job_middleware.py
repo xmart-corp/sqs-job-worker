@@ -1,5 +1,9 @@
+import contextlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
+
+import structlog
 
 
 @dataclass
@@ -30,7 +34,37 @@ class JobMiddleware:
         return call_next()
 
     def consume(self, job: Job, call_next: Callable[[Job], None]) -> None:
-        return call_next(job)
+        try:
+            transaction = self.consume_transaction(job)
+            if transaction is None:
+                return call_next(job)
+            transaction.__enter__()
+        except Exception:
+            return call_next(job)
+        try:
+            with contextlib.suppress(Exception):
+                if ids := self.linking_ids(job):
+                    structlog.contextvars.bind_contextvars(**ids)
+            call_next(job)
+        except BaseException as error:
+            if isinstance(error, Exception):
+                with contextlib.suppress(Exception):
+                    self.on_handler_error()
+            with contextlib.suppress(Exception):
+                transaction.__exit__(type(error), error, error.__traceback__)
+            raise
+        else:
+            with contextlib.suppress(Exception):
+                transaction.__exit__(None, None, None)
+
+    def consume_transaction(self, job: Job, /) -> Any:
+        """Return a vendor context manager to wrap consumption in, or None to skip tracing."""
+
+    def linking_ids(self, job: Job, /) -> dict | None:
+        """Return ids to bind to logs while the job runs, inside the started transaction."""
+
+    def on_handler_error(self) -> None:
+        """Report the active handler exception (``Exception`` only) to the vendor."""
 
     @classmethod
     def compose_producer(cls, middleware: Sequence["JobMiddleware"], terminal: Callable[[Job], dict]) -> Callable[[Job], dict]:
