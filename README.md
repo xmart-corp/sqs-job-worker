@@ -173,6 +173,7 @@ The core depends only on boto3 and structlog; integrations that touch APM vendor
 Install the corresponding extra to use an APM integration.
 
 - `contrib.newrelic.NewRelicMiddleware` — propagates New Relic distributed traces, instruments jobs as `BackgroundTask`s, and binds `trace_id` / `span_id` to logs
+- Where the agent cannot link the trace, it falls back to a synthesized W3C traceparent so producer and consumer logs stay correlated by one `trace_id`
 - `contrib.otel.OTelMiddleware` — propagates traces with the propagator configured in your application, instruments jobs with `CONSUMER` spans carrying `messaging.*` attributes, and binds `trace_id` / `span_id` to logs
 - `contrib.sentry.SentryMiddleware` — propagates `sentry-trace` / `baggage`, reports handler exceptions to Sentry, and leaves the retry decision to the worker
 - `contrib.ecs.EcsDrainMiddleware` — during an ECS rolling deploy, pauses polling once a task from a newer revision of the same task definition family is RUNNING, preventing previous-generation workers from picking up new jobs. If the new generation fails and stops, polling resumes automatically

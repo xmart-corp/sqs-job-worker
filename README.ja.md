@@ -174,6 +174,7 @@ queues = QueueGroup.build(
 APM連携は対応するextraを入れて使います。
 
 - `contrib.newrelic.NewRelicMiddleware` — New Relicの分散トレースを伝搬し、ジョブを`BackgroundTask`として計測して、`trace_id` / `span_id`をログへバインドします
+- エージェントがトレースを連結できない場合は、W3C traceparentを自前で合成して、発行側と受信側のログが1つの`trace_id`で突き合わせられる状態を保ちます
 - `contrib.otel.OTelMiddleware` — アプリケーションで設定したプロパゲーターでトレースを伝搬し、`messaging.*`属性付きの`CONSUMER`スパンでジョブを計測して、`trace_id` / `span_id`をログへバインドします
 - `contrib.sentry.SentryMiddleware` — `sentry-trace` / `baggage`を伝搬し、ハンドラーの例外をSentryへ送信したうえで、リトライの判断はワーカーに委ねます
 - `contrib.ecs.EcsDrainMiddleware` — ECSのローリングデプロイ中、同じタスク定義ファミリーのより新しいリビジョンのタスクがRUNNINGになるとポーリングを一時停止し、旧世代のワーカーが新しいジョブを受け取ってしまうのを防ぎます。新世代が失敗して止まった場合は自動的に再開します

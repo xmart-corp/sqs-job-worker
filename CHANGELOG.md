@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `NewRelicMiddleware` keeps producer and consumer logs correlated by one trace id even
+  where the agent cannot link the trace (distributed tracing disabled, agent inactive):
+  the producer synthesizes a W3C `traceparent` from the current trace id when the agent
+  injects no headers, and the consumer binds the message's trace id to logs when the
+  transaction did not continue it.
+
 ## [0.1.0] - 2026-07-27
 
 Initial release.

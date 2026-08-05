@@ -348,6 +348,21 @@ class ApmIntegrationTests(TestCase):
 
         agent.accept_distributed_trace_headers.assert_called_once_with({"newrelic": "nr", "traceparent": "00-trace"}, transport_type="Queue")
 
+    @mock.patch("sqs_job_worker.contrib.newrelic.newrelic.agent")
+    def test_new_relic_falls_back_to_a_synthesized_traceparent_when_the_agent_injects_no_headers(self, agent):
+        agent.get_linking_metadata.side_effect = [{"trace.id": "a" * 32}, {"trace.id": "f" * 32, "span.id": "e" * 16}]
+        with mock_aws():
+            client = boto3.client("sqs", region_name=REGION)
+            url = _queue(client, "jobs-standard")
+            queues = QueueGroup.build(boto_client=client, queues={"default": {"url": url}}, middleware=[NewRelicMiddleware()])
+            queues.enqueue("default", "greet")
+            contexts = []
+
+            _worker(queues, {"greet": lambda payload: contexts.append(structlog.contextvars.get_contextvars())}).run()
+
+            self.assertEqual(contexts[0]["trace_id"], "a" * 32)
+            self.assertNotIn("span_id", contexts[0])
+
     @mock.patch("sqs_job_worker.contrib.sentry.sentry_sdk")
     def test_sentry_headers_reach_the_consumer_middleware(self, sdk):
         sdk.get_traceparent.return_value = "sentry-trace"
