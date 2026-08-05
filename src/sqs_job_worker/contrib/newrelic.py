@@ -1,8 +1,8 @@
 import contextlib
 from collections.abc import Callable
+from typing import Any
 
 import newrelic.agent
-import structlog
 
 from sqs_job_worker.job_middleware import Job, JobMiddleware
 
@@ -27,29 +27,14 @@ class NewRelicMiddleware(JobMiddleware):
         job.trace_headers.update(headers)
         return call_next(job)
 
-    def consume(self, job: Job, call_next: Callable[[Job], None]) -> None:
-        try:
-            transaction = newrelic.agent.BackgroundTask(newrelic.agent.application(), name=job.job_type, group=self._group)
-            transaction.__enter__()
-        except Exception:
-            return call_next(job)
-        try:
-            if job.trace_headers:
-                with contextlib.suppress(Exception):
-                    newrelic.agent.accept_distributed_trace_headers(job.trace_headers, transport_type="Queue")
-            structlog.contextvars.bind_contextvars(**self._linking_ids())
-            call_next(job)
-        except BaseException as error:
-            with contextlib.suppress(Exception):
-                transaction.__exit__(type(error), error, error.__traceback__)
-            raise
-        else:
-            with contextlib.suppress(Exception):
-                transaction.__exit__(None, None, None)
+    def consume_transaction(self, job: Job) -> Any:
+        return newrelic.agent.BackgroundTask(newrelic.agent.application(), name=job.job_type, group=self._group)
 
-    @staticmethod
-    def _linking_ids() -> dict:
-        """Return trace and root-span ids for log correlation when available."""
+    def linking_ids(self, job: Job) -> dict:
+        """Accept the message's trace headers into the transaction, then return log-correlation ids."""
+        if job.trace_headers:
+            with contextlib.suppress(Exception):
+                newrelic.agent.accept_distributed_trace_headers(job.trace_headers, transport_type="Queue")
         try:
             metadata = newrelic.agent.get_linking_metadata()
         except Exception:

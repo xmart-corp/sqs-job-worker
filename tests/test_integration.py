@@ -361,7 +361,6 @@ class ApmIntegrationTests(TestCase):
     def test_otel_headers_reach_the_consumer_middleware(self, propagate):
         propagate.inject.side_effect = lambda carrier: carrier.update({"traceparent": "00-trace"})
         tracer = mock.MagicMock()
-        tracer.start_as_current_span.return_value.__enter__.return_value.get_span_context.return_value.is_valid = False
 
         self._run(OTelMiddleware(tracer=tracer))
 

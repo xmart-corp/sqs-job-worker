@@ -1,5 +1,6 @@
 import contextlib
 from collections.abc import Callable
+from typing import Any
 
 import sentry_sdk
 
@@ -30,22 +31,8 @@ class SentryMiddleware(JobMiddleware):
                 job.trace_headers["baggage"] = f"{existing},{baggage}" if existing else baggage
         return call_next(job)
 
-    def consume(self, job: Job, call_next: Callable[[Job], None]) -> None:
-        try:
-            transaction = sentry_sdk.continue_trace(job.trace_headers, op=self._op, name=job.job_type)
-            started = sentry_sdk.start_transaction(transaction)
-            started.__enter__()
-        except Exception:
-            return call_next(job)
-        try:
-            call_next(job)
-        except BaseException as error:
-            if isinstance(error, Exception):
-                with contextlib.suppress(Exception):
-                    sentry_sdk.capture_exception()
-            with contextlib.suppress(Exception):
-                started.__exit__(type(error), error, error.__traceback__)
-            raise
-        else:
-            with contextlib.suppress(Exception):
-                started.__exit__(None, None, None)
+    def consume_transaction(self, job: Job) -> Any:
+        return sentry_sdk.start_transaction(sentry_sdk.continue_trace(job.trace_headers, op=self._op, name=job.job_type))
+
+    def on_handler_error(self) -> None:
+        sentry_sdk.capture_exception()
