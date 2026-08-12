@@ -45,7 +45,7 @@ class JobProcessor:
             envelope = json.loads(message.get("Body", ""))
             job_type = envelope["job_type"]
             payload = envelope["payload"]
-        except (ValueError, KeyError, TypeError) as e:
+        except (ValueError, KeyError, TypeError, RecursionError) as e:
             logger.error(f"deleting message: failed to parse body: {e}")
             queue.delete_message(receipt_handle)
             return

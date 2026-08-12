@@ -19,7 +19,7 @@ class SqsMessageAttributes:
             if key == cls.CORRELATION_FIELDS_ATTRIBUTE:
                 try:
                     decoded = json.loads(value)
-                except ValueError:
+                except (ValueError, RecursionError):
                     decoded = {}
                 correlation_fields = decoded if isinstance(decoded, dict) else {}
             else:
