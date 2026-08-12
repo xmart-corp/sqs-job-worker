@@ -40,3 +40,25 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract this version's notes from the changelog
+        run: |
+          awk -v ver="${GITHUB_REF_NAME#v}" '
+            found && /^## \[/ { exit }
+            found { print }
+            $0 ~ "^## \\[" ver "\\]" { found = 1 }
+          ' CHANGELOG.md > /tmp/notes.md
+          test -s /tmp/notes.md
+
+      - name: Create the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file /tmp/notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
