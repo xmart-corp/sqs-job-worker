@@ -77,7 +77,7 @@ ECSやKubernetesではこのプロセスをそのまま常駐サービスとし�
 ```
 
 - ボディをJSONとして解釈できないとき、`job_type`が文字列でないとき、`payload`がオブジェクトでないときは、リトライしても直らないためメッセージを削除します
-- `job_type`に対応するハンドラーが登録されていない場合は、そのジョブを担当する別のワーカーに再配信されることを想定して、メッセージを削除せずに残します
+- `job_type`に対応するハンドラーが登録されていない場合は、そのジョブを担当する別のワーカーに再配信されることを想定して、メッセージを削除せずに残します。短時間で再配信を繰り返さないよう、visibility timeoutを最低5分まで延長します。FIFOキューでは同じmessage groupの後続も同じ期間止まるため、未知の`job_type`はredrive policyでデッドレターキューへ移されるまで順序配信を停滞させます
 
 相関フィールドとトレースヘッダーはボディではなくSQSメッセージ属性で運ばれます。
 
@@ -98,7 +98,8 @@ queues.enqueue(
 ## リトライと失敗
 
 - ハンドラーが正常終了すると、メッセージは削除されます
-- ハンドラーが例外を送出すると、メッセージは削除されずvisibility timeoutの経過後に再配信されます。リトライ回数の上限やデッドレターキューへの退避は、SQS側のredrive policyで設定してください
+- ハンドラーが例外を送出すると、メッセージは削除されずvisibility timeoutの経過後に再配信されます
+- 本番キューではSQSのredrive policyとデッドレターキューを必ず設定し、ハンドラーの失敗、検証をすり抜けた不正メッセージ、未知の`job_type`が無制限に再試行されないようにしてください
 - リトライしても成功する見込みがない場合は`NonRetryableError`を送出してください。メッセージは再配信されず、すぐに削除されます
 
 ```python
@@ -190,24 +191,21 @@ APM連携は対応するextraを入れて使います。
 
 - `produce(job, call_next)`は`enqueue()`をラップします。相関フィールドやトレースヘッダーの注入に使います
 - `poll(call_next)`はポーリングの1サイクルをラップします。受信の一時停止(ドレイン)やサイクル単位の計測に使います
-- `consume(job, call_next)`はハンドラーの実行をラップします。APMトランザクションやテナントスコープの設定に使います
+- `consume(job, call_next)`はハンドラーの実行をラップします。APMトランザクションやジョブ単位の計測に使います
 
 ```python
 from sqs_job_worker import Job, JobMiddleware
 
-class TenantMiddleware(JobMiddleware):
+class RequestIdMiddleware(JobMiddleware):
     def produce(self, job: Job, call_next):
-        job.correlation_fields.setdefault("tenant_id", current_tenant_id())
+        job.correlation_fields.setdefault("request_id", current_request_id())
         return call_next(job)
-
-    def consume(self, job: Job, call_next):
-        with tenant_scope(job.correlation_fields["tenant_id"]):
-            return call_next(job)
 ```
 
 ## 相関フィールドとトレース伝搬
 
 - `enqueue(..., correlation_fields={"request_id": "r-1"})`で渡したdictは、`correlation_fields`という1つのメッセージ属性にJSONとしてまとめて格納されます。コンシューマー側では自動的にstructlogのコンテキストへバインドされ、そのジョブが出すすべてのログに付与されます。ただし、`queue`や`message_id`などワーカーが予約するキーは上書きされません
+- 相関フィールドは、メッセージの送信権限を持つ任意のプリンシパルが設定できる、信頼されていない観測用メタデータです。認証、認可、テナント選択には使用しないでください
 - トレースヘッダー(`traceparent`など)は個別のメッセージ属性として運ばれます。コアはヘッダーの中身を解釈せず、注入と取り出しはcontribのトレーシングミドルウェアが担います
 - SQSのメッセージ属性は1メッセージあたり10個までです。これを超える場合は`message_attributes`で明示した属性を優先し、伝搬用の属性を末尾から取り除いたうえで`propagation_attributes_dropped`の警告を出します
 

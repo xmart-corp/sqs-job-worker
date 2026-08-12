@@ -76,7 +76,7 @@ Any producer that follows this format can enqueue jobs, including producers writ
 ```
 
 - When the body cannot be parsed as JSON, `job_type` is not a string, or `payload` is not an object, the message is deleted, because no retry can fix it
-- When no handler is registered for the `job_type`, the message is left undeleted, on the assumption that it will be redelivered to another worker responsible for that job
+- When no handler is registered for the `job_type`, the message is left undeleted, on the assumption that it will be redelivered to another worker responsible for that job. Its visibility timeout is extended to at least five minutes to avoid a tight redelivery loop. On a FIFO queue this holds back the rest of that message group for the same period, so unknown job types stall ordered delivery until the redrive policy moves them to the dead-letter queue
 
 Correlation fields and trace headers travel in SQS message attributes, not in the body.
 
@@ -97,7 +97,8 @@ queues.enqueue(
 ## Retries and failures
 
 - When a handler returns normally, the message is deleted
-- When a handler raises, the message is not deleted and is redelivered after the visibility timeout expires. Configure retry limits and dead-letter queues through the SQS redrive policy
+- When a handler raises, the message is not deleted and is redelivered after the visibility timeout expires
+- Production queues must configure an SQS redrive policy and dead-letter queue to bound retries for handler failures, malformed messages that escape validation, and unknown job types
 - When retrying cannot possibly succeed, raise `NonRetryableError`. The message is deleted immediately without redelivery
 
 ```python
@@ -188,24 +189,21 @@ Subclass `JobMiddleware` and override only the hooks you need.
 
 - `produce(job, call_next)` wraps `enqueue()`. Use it to inject correlation fields and trace headers
 - `poll(call_next)` wraps one polling cycle. Use it to pause receiving (draining) or for per-cycle instrumentation
-- `consume(job, call_next)` wraps handler execution. Use it to set up APM transactions or tenant scopes
+- `consume(job, call_next)` wraps handler execution. Use it to set up APM transactions or per-job metrics
 
 ```python
 from sqs_job_worker import Job, JobMiddleware
 
-class TenantMiddleware(JobMiddleware):
+class RequestIdMiddleware(JobMiddleware):
     def produce(self, job: Job, call_next):
-        job.correlation_fields.setdefault("tenant_id", current_tenant_id())
+        job.correlation_fields.setdefault("request_id", current_request_id())
         return call_next(job)
-
-    def consume(self, job: Job, call_next):
-        with tenant_scope(job.correlation_fields["tenant_id"]):
-            return call_next(job)
 ```
 
 ## Correlation fields and trace propagation
 
 - The dict passed as `enqueue(..., correlation_fields={"request_id": "r-1"})` is stored as JSON in a single message attribute named `correlation_fields`. On the consumer side it is bound to the structlog context automatically and attached to every log line the job emits. Keys reserved by the worker, such as `queue` and `message_id`, are never overwritten
+- Correlation fields are untrusted observability metadata because any principal allowed to send a message can set them. Do not use them for authentication, authorization, or tenant selection
 - Trace headers (such as `traceparent`) travel as individual message attributes. The core never interprets their contents; injection and extraction are handled by the tracing middleware in contrib
 - SQS allows up to 10 message attributes per message. When the limit would be exceeded, attributes given explicitly via `message_attributes` take precedence: propagation attributes are dropped from the end and a `propagation_attributes_dropped` warning is logged
 

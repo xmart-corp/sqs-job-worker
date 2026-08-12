@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   injects no headers, and the consumer binds the message's trace id to logs when the
   transaction did not continue it.
 
+### Changed
+
+- Document correlation fields as untrusted observability metadata that must not be used
+  for authentication, authorization, or tenant selection.
+- Defer unknown job types for at least five minutes before redelivery, note that this stalls
+  the message group on FIFO queues, and document the production requirement for an SQS redrive
+  policy and dead-letter queue.
+- Treat recursive JSON bodies as permanently malformed messages and ignore recursive
+  correlation-field JSON instead of leaving either message in an unbounded retry loop.
+
 ## [0.1.0] - 2026-07-27
 
 Initial release.
