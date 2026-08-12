@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Document correlation fields as untrusted observability metadata that must not be used
+  for authentication, authorization, or tenant selection.
 - Defer unknown job types for at least five minutes before redelivery, note that this stalls
   the message group on FIFO queues, and document the production requirement for an SQS redrive
   policy and dead-letter queue.
