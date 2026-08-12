@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-12
+
 ### Added
 
 - `NewRelicMiddleware` keeps producer and consumer logs correlated by one trace id even
@@ -49,5 +51,6 @@ Initial release.
 - Distributed tracing via opaque trace headers in message attributes: New Relic, Sentry,
   and OpenTelemetry middleware in `contrib` propagate on the producer and measure on the consumer.
 
-[Unreleased]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/xmart-corp/sqs-job-worker/releases/tag/v0.1.0
