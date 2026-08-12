@@ -89,6 +89,13 @@ class SqsQueue:
         except Exception as e:
             logger.warning(f"failed to release message during shutdown: {e}", queue_name=self.name, exc_info=True)
 
+    def defer_message(self, receipt_handle: str, visibility_timeout: int) -> None:
+        """Best-effort defer a message for later redelivery."""
+        try:
+            self._client.change_message_visibility(receipt_handle, visibility_timeout)
+        except Exception as e:
+            logger.warning(f"failed to defer message for redelivery: {e}", queue_name=self.name, visibility_timeout=visibility_timeout, exc_info=True)
+
     def delete_message(self, receipt_handle: str) -> bool:
         """Best-effort message deletion, returning whether the request succeeded."""
         try:

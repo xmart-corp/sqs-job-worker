@@ -76,7 +76,7 @@ Any producer that follows this format can enqueue jobs, including producers writ
 ```
 
 - When the body cannot be parsed as JSON, `job_type` is not a string, or `payload` is not an object, the message is deleted, because no retry can fix it
-- When no handler is registered for the `job_type`, the message is left undeleted, on the assumption that it will be redelivered to another worker responsible for that job
+- When no handler is registered for the `job_type`, the message is left undeleted, on the assumption that it will be redelivered to another worker responsible for that job. Its visibility timeout is extended to at least five minutes to avoid a tight redelivery loop. On a FIFO queue this holds back the rest of that message group for the same period, so unknown job types stall ordered delivery until the redrive policy moves them to the dead-letter queue
 
 Correlation fields and trace headers travel in SQS message attributes, not in the body.
 
@@ -97,7 +97,8 @@ queues.enqueue(
 ## Retries and failures
 
 - When a handler returns normally, the message is deleted
-- When a handler raises, the message is not deleted and is redelivered after the visibility timeout expires. Configure retry limits and dead-letter queues through the SQS redrive policy
+- When a handler raises, the message is not deleted and is redelivered after the visibility timeout expires
+- Production queues must configure an SQS redrive policy and dead-letter queue to bound retries for handler failures, malformed messages that escape validation, and unknown job types
 - When retrying cannot possibly succeed, raise `NonRetryableError`. The message is deleted immediately without redelivery
 
 ```python

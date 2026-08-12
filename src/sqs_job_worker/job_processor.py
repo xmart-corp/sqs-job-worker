@@ -61,7 +61,9 @@ class JobProcessor:
             return
 
         if job_type not in self._handlers:
-            logger.warning("unknown job_type; leaving for redelivery", job_type=job_type)
+            visibility_timeout = max(queue.visibility_timeout or 0, 300)
+            logger.warning("unknown job_type; deferring for redelivery", job_type=job_type, visibility_timeout=visibility_timeout)
+            queue.defer_message(receipt_handle, visibility_timeout)
             return
 
         # Do not let application correlation fields overwrite worker-bound log fields.

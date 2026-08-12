@@ -267,19 +267,33 @@ class QueueIntegrationTests(TestCase):
 
                 self.assertEqual(len(_remaining(client, url)), remaining_count)
 
-    def test_invalid_messages_are_deleted_and_unknown_jobs_are_retained(self):
-        cases = [("not-json", 0), (json.dumps({"job_type": "unknown", "payload": {}}), 1)]
+    def test_invalid_message_bodies_are_deleted(self):
+        with mock_aws():
+            client = boto3.client("sqs", region_name=REGION)
+            url = _queue(client, "jobs.fifo", fifo=True)
+            client.send_message(QueueUrl=url, MessageBody="not-json", MessageGroupId="g1")
+            queues = QueueGroup({"default": {"queue": SqsQueue(url, boto_client=client, visibility_timeout=0)}})
 
-        for body, remaining_count in cases:
-            with self.subTest(body=body), mock_aws():
+            _worker(queues, {}).run()
+
+            self.assertEqual(_remaining(client, url), [])
+
+    def test_unknown_jobs_are_deferred_for_at_least_five_minutes(self):
+        for queue_visibility, expected_visibility in ((0, 300), (600, 600)):
+            with self.subTest(queue_visibility=queue_visibility), mock_aws():
                 client = boto3.client("sqs", region_name=REGION)
                 url = _queue(client, "jobs.fifo", fifo=True)
-                client.send_message(QueueUrl=url, MessageBody=body, MessageGroupId="g1")
-                queues = QueueGroup({"default": {"queue": SqsQueue(url, boto_client=client, visibility_timeout=0)}})
+                client.send_message(QueueUrl=url, MessageBody=json.dumps({"job_type": "unknown", "payload": {}}), MessageGroupId="g1")
+                queue = SqsQueue(url, boto_client=client, visibility_timeout=queue_visibility)
+                queues = QueueGroup({"default": {"queue": queue}})
 
-                _worker(queues, {}).run()
+                with mock.patch.object(queue._client, "change_message_visibility", wraps=queue._client.change_message_visibility) as change_visibility:
+                    _worker(queues, {}).run()
 
-                self.assertEqual(len(_remaining(client, url)), remaining_count)
+                change_visibility.assert_called_once_with(mock.ANY, expected_visibility)
+                receipt_handle = change_visibility.call_args.args[0]
+                client.change_message_visibility(QueueUrl=url, ReceiptHandle=receipt_handle, VisibilityTimeout=0)
+                self.assertEqual(len(_remaining(client, url)), 1)
 
     def test_poll_middleware_may_stop_messages_from_being_received(self):
         with mock_aws():
