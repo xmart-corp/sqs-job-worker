@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `JobMiddleware.consume` ran the handler twice when it raised under a middleware without a
+  vendor transaction (the default `consume_transaction`, e.g. `EcsDrainMiddleware`): the
+  fallback for a failed transaction start caught the handler's exception and called the
+  handler again, so the first failure was swallowed and the job could finish as a success.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added
