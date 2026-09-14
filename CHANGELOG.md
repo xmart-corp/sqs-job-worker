@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-14
+
 ### Fixed
 
 - `JobMiddleware.consume` ran the handler twice when it raised under a middleware without a
@@ -58,6 +60,7 @@ Initial release.
 - Distributed tracing via opaque trace headers in message attributes: New Relic, Sentry,
   and OpenTelemetry middleware in `contrib` propagate on the producer and measure on the consumer.
 
-[Unreleased]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/xmart-corp/sqs-job-worker/releases/tag/v0.1.0
