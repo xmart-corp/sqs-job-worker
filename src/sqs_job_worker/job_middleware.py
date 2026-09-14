@@ -36,10 +36,11 @@ class JobMiddleware:
     def consume(self, job: Job, call_next: Callable[[Job], None]) -> None:
         try:
             transaction = self.consume_transaction(job)
-            if transaction is None:
-                return call_next(job)
-            transaction.__enter__()
+            if transaction is not None:
+                transaction.__enter__()
         except Exception:
+            transaction = None
+        if transaction is None:
             return call_next(job)
         try:
             with contextlib.suppress(Exception):
