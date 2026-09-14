@@ -257,14 +257,18 @@ class QueueIntegrationTests(TestCase):
             with self.subTest(error_type=error_type.__name__), mock_aws():
                 client = boto3.client("sqs", region_name=REGION)
                 url = _queue(client, "jobs.fifo", fifo=True)
-                queues = QueueGroup({"default": {"queue": SqsQueue(url, boto_client=client, visibility_timeout=0)}})
+                # A middleware that overrides nothing (like EcsDrainMiddleware) consumes without a vendor transaction.
+                queues = QueueGroup({"default": {"queue": SqsQueue(url, boto_client=client, visibility_timeout=0)}}, middleware=[JobMiddleware()])
                 queues.enqueue("default", "fail", message_group_id="g1")
+                calls = []
 
-                def handler(payload, error_type=error_type):
+                def handler(payload, error_type=error_type, calls=calls):
+                    calls.append(payload)
                     raise error_type("failed")
 
                 _worker(queues, {"fail": handler}).run()
 
+                self.assertEqual(len(calls), 1)
                 self.assertEqual(len(_remaining(client, url)), remaining_count)
 
     def test_invalid_message_bodies_are_deleted(self):
