@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from urllib.parse import unquote, urlsplit
 
 import structlog
@@ -11,9 +12,23 @@ job_logger = structlog.get_logger("sqs_job_worker.job")
 
 
 class SqsQueue:
-    """A single SQS queue with producer and consumer operations and configuration."""
+    """A single SQS queue with producer and consumer operations and configuration.
 
-    def __init__(self, url: str, *, boto_client, visibility_timeout: int | None = None, max_runtime_seconds: float = 3600) -> None:
+    ``decoder`` turns a received SQS message into ``(job_type, payload)`` for queues fed by
+    producers outside the library, such as S3 event notifications. Returning None deletes the
+    message as having nothing to process, raising ``NonRetryableError`` deletes it, and any other
+    exception leaves it for redelivery. Without a decoder the body must be the library's JSON message format.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        boto_client,
+        visibility_timeout: int | None = None,
+        max_runtime_seconds: float = 3600,
+        decoder: Callable[[dict], tuple[str, dict] | None] | None = None,
+    ) -> None:
         if not url:
             raise ValueError(f"url must be a non-empty string, got {url!r}")
         self.url = url
@@ -21,6 +36,7 @@ class SqsQueue:
         self._client = SqsClient(url, boto_client)
         self.visibility_timeout = visibility_timeout
         self.max_runtime_seconds = max_runtime_seconds
+        self.decoder = decoder
 
     def enqueue(
         self,

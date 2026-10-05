@@ -95,6 +95,36 @@ queues.enqueue(
 )
 ```
 
+### ほかのプロデューサーからのメッセージ
+
+S3のイベント通知など、ほかのサービスが独自の形式でキューに入れるメッセージを処理するには、`SqsQueue`に`decoder`を渡します。
+`decoder`はSQSのメッセージ（`Body`、`MessageId`、属性）を受け取り、`(job_type, payload)`を返します。
+
+- Noneを返すと、処理するものがないとしてメッセージを削除します
+- `NonRetryableError`を送出すると、メッセージを削除します
+- それ以外の例外を送出すると、メッセージを削除せずに残します。再配信が続けば、redrive policyでデッドレターキューへ移されます
+
+```python
+import json
+from urllib.parse import unquote_plus
+
+from sqs_job_worker import NonRetryableError, SqsQueue
+
+def decode_s3_event(message: dict) -> tuple[str, dict] | None:
+    body = json.loads(message["Body"])
+    if body.get("Event") == "s3:TestEvent":
+        return None
+    if "Records" not in body:
+        raise NonRetryableError("not an S3 event notification")
+    keys = [unquote_plus(record["s3"]["object"]["key"]) for record in body["Records"]]
+    return "ingest_objects", {"keys": keys}
+
+queue = SqsQueue(url, boto_client=sqs, decoder=decode_s3_event)
+```
+
+このようなメッセージにはトレースヘッダーが無いため、コンシューマー側のミドルウェアで補わない限り、配信ごとに新しいトレースとして始まります。
+`enqueue()`は引き続き上記のJSON形式で書き込むため、`decoder`を持つキューへは、その`decoder`がこの形式も読める場合にだけ投入してください。
+
 ## リトライと失敗
 
 - ハンドラーが正常終了すると、メッセージは削除されます

@@ -282,6 +282,36 @@ class QueueIntegrationTests(TestCase):
 
             self.assertEqual(_remaining(client, url), [])
 
+    def test_decoders_turn_foreign_bodies_into_jobs(self):
+        def decode_s3_event(message):
+            body = json.loads(message["Body"])
+            if body.get("Event") == "s3:TestEvent":
+                return None
+            if "Records" not in body:
+                raise NonRetryableError("not an S3 event notification")
+            return "ingest", {"keys": [record["s3"]["object"]["key"] for record in body["Records"]]}
+
+        s3_event = json.dumps({"Records": [{"s3": {"object": {"key": "raw/mail-1"}}}]})
+        cases = [
+            ("decoded", s3_event, [{"keys": ["raw/mail-1"]}], 0),
+            ("nothing to process", json.dumps({"Event": "s3:TestEvent"}), [], 0),
+            ("non-retryable", json.dumps({"unexpected": True}), [], 0),
+            ("decoder error", "not-json", [], 1),
+        ]
+
+        for name, body, expected_calls, remaining_count in cases:
+            with self.subTest(name), mock_aws():
+                client = boto3.client("sqs", region_name=REGION)
+                url = _queue(client, "s3-events")
+                client.send_message(QueueUrl=url, MessageBody=body)
+                queue = SqsQueue(url, boto_client=client, visibility_timeout=0, decoder=decode_s3_event)
+                calls = []
+
+                _worker(QueueGroup({"s3": {"queue": queue}}), {"ingest": calls.append}).run()
+
+                self.assertEqual(calls, expected_calls)
+                self.assertEqual(len(_remaining(client, url)), remaining_count)
+
     def test_unknown_jobs_are_deferred_for_at_least_five_minutes(self):
         for queue_visibility, expected_visibility in ((0, 300), (600, 600)):
             with self.subTest(queue_visibility=queue_visibility), mock_aws():
