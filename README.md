@@ -102,6 +102,7 @@ It receives the SQS message (`Body`, `MessageId`, and attributes) and returns `(
 - Returning None deletes the message as having nothing to process
 - Raising `NonRetryableError` deletes the message
 - Raising any other exception leaves the message for redelivery, so the redrive policy eventually moves it to the dead-letter queue
+- Returning anything other than None or `(str, dict)` is treated as a decoder bug and also leaves the message for redelivery, so a broken decoder does not delete valid messages
 
 ```python
 import json

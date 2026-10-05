@@ -17,7 +17,8 @@ class SqsQueue:
     ``decoder`` turns a received SQS message into ``(job_type, payload)`` for queues fed by
     producers outside the library, such as S3 event notifications. Returning None deletes the
     message as having nothing to process, raising ``NonRetryableError`` deletes it, and any other
-    exception leaves it for redelivery. Without a decoder the body must be the library's JSON message format.
+    exception or a result that is not ``(str, dict)`` leaves it for redelivery. Without a decoder
+    the body must be the library's JSON message format.
     """
 
     def __init__(

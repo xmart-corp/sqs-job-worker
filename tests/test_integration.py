@@ -272,15 +272,18 @@ class QueueIntegrationTests(TestCase):
                 self.assertEqual(len(_remaining(client, url)), remaining_count)
 
     def test_invalid_message_bodies_are_deleted(self):
-        with mock_aws():
-            client = boto3.client("sqs", region_name=REGION)
-            url = _queue(client, "jobs.fifo", fifo=True)
-            client.send_message(QueueUrl=url, MessageBody="not-json", MessageGroupId="g1")
-            queues = QueueGroup({"default": {"queue": SqsQueue(url, boto_client=client, visibility_timeout=0)}})
+        bodies = ["not-json", json.dumps({"job_type": 1, "payload": {}}), json.dumps({"job_type": "greet", "payload": []})]
 
-            _worker(queues, {}).run()
+        for body in bodies:
+            with self.subTest(body=body), mock_aws():
+                client = boto3.client("sqs", region_name=REGION)
+                url = _queue(client, "jobs.fifo", fifo=True)
+                client.send_message(QueueUrl=url, MessageBody=body, MessageGroupId="g1")
+                queues = QueueGroup({"default": {"queue": SqsQueue(url, boto_client=client, visibility_timeout=0)}})
 
-            self.assertEqual(_remaining(client, url), [])
+                _worker(queues, {"greet": lambda payload: None}).run()
+
+                self.assertEqual(_remaining(client, url), [])
 
     def test_decoders_turn_foreign_bodies_into_jobs(self):
         def decode_s3_event(message):
@@ -291,20 +294,24 @@ class QueueIntegrationTests(TestCase):
                 raise NonRetryableError("not an S3 event notification")
             return "ingest", {"keys": [record["s3"]["object"]["key"] for record in body["Records"]]}
 
+        def decode_without_dict_payload(message):
+            return "ingest", ["raw/mail-1"]
+
         s3_event = json.dumps({"Records": [{"s3": {"object": {"key": "raw/mail-1"}}}]})
         cases = [
-            ("decoded", s3_event, [{"keys": ["raw/mail-1"]}], 0),
-            ("nothing to process", json.dumps({"Event": "s3:TestEvent"}), [], 0),
-            ("non-retryable", json.dumps({"unexpected": True}), [], 0),
-            ("decoder error", "not-json", [], 1),
+            ("decoded", decode_s3_event, s3_event, [{"keys": ["raw/mail-1"]}], 0),
+            ("nothing to process", decode_s3_event, json.dumps({"Event": "s3:TestEvent"}), [], 0),
+            ("non-retryable", decode_s3_event, json.dumps({"unexpected": True}), [], 0),
+            ("decoder error", decode_s3_event, "not-json", [], 1),
+            ("malformed decoder result", decode_without_dict_payload, s3_event, [], 1),
         ]
 
-        for name, body, expected_calls, remaining_count in cases:
+        for name, decoder, body, expected_calls, remaining_count in cases:
             with self.subTest(name), mock_aws():
                 client = boto3.client("sqs", region_name=REGION)
                 url = _queue(client, "s3-events")
                 client.send_message(QueueUrl=url, MessageBody=body)
-                queue = SqsQueue(url, boto_client=client, visibility_timeout=0, decoder=decode_s3_event)
+                queue = SqsQueue(url, boto_client=client, visibility_timeout=0, decoder=decoder)
                 calls = []
 
                 _worker(QueueGroup({"s3": {"queue": queue}}), {"ingest": calls.append}).run()

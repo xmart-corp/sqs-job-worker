@@ -20,9 +20,14 @@ class NonRetryableError(Exception):
 def _decode_envelope(message: dict) -> tuple[str, dict]:
     try:
         envelope = json.loads(message.get("Body", ""))
-        return envelope["job_type"], envelope["payload"]
+        job_type, payload = envelope["job_type"], envelope["payload"]
     except (ValueError, KeyError, TypeError, RecursionError) as e:
         raise NonRetryableError(f"failed to parse body: {e}") from e
+    if not isinstance(job_type, str):
+        raise NonRetryableError(f"job_type is not a string job_type={job_type!r}")
+    if not isinstance(payload, dict):
+        raise NonRetryableError(f"payload is not a dict payload={payload!r}")
+    return job_type, payload
 
 
 class JobProcessor:
@@ -52,28 +57,20 @@ class JobProcessor:
         decode = queue.decoder or _decode_envelope
         try:
             decoded = decode(message)
+            if decoded is None:
+                logger.info("deleting message: decoder found no job to process")
+                queue.delete_message(receipt_handle)
+                return
+            job_type, payload = decoded
+            # A malformed result is a decoder bug, not a bad message, so it must not delete the message.
+            if not isinstance(job_type, str) or not isinstance(payload, dict):
+                raise TypeError(f"decoder must return None or (str, dict), got {decoded!r}")
         except NonRetryableError as e:
             logger.error(f"deleting message: {e}")
             queue.delete_message(receipt_handle)
             return
         except Exception as e:
             logger.error(f"failed to decode message; leaving for redelivery: {e}", exc_info=True)
-            return
-
-        if decoded is None:
-            logger.info("deleting message: decoder found no job to process")
-            queue.delete_message(receipt_handle)
-            return
-        job_type, payload = decoded
-
-        if not isinstance(job_type, str):
-            logger.error(f"deleting message: job_type is not a string job_type={job_type!r}")
-            queue.delete_message(receipt_handle)
-            return
-
-        if not isinstance(payload, dict):
-            logger.error(f"deleting message: payload is not a dict payload={payload!r}")
-            queue.delete_message(receipt_handle)
             return
 
         if job_type not in self._handlers:

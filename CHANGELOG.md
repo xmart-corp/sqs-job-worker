@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SqsQueue(decoder=...)` consumes messages produced outside the library, such as S3 event
   notifications. The decoder maps an SQS message to `(job_type, payload)`; returning None
   deletes a message with nothing to process, raising `NonRetryableError` deletes it, and any
-  other exception leaves it for redelivery. Queues without a decoder read the JSON message format as before.
+  other exception or a result that is not `(str, dict)` leaves it for redelivery. Queues without
+  a decoder read the JSON message format as before.
 
 ## [0.2.1] - 2026-09-14
 
