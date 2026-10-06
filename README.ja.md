@@ -98,12 +98,10 @@ queues.enqueue(
 ### ほかのプロデューサーからのメッセージ
 
 S3のイベント通知など、ほかのサービスが独自の形式でキューに入れるメッセージを処理するには、`SqsQueue`に`decoder`を渡します。
-`decoder`はSQSのメッセージ（`Body`、`MessageId`、属性）を受け取り、`(job_type, payload)`を返します。
+`decoder`はメッセージボディを受け取り、`(job_type, payload)`を返します。
 
-- Noneを返すと、処理するものがないとしてメッセージを削除します
 - `NonRetryableError`を送出すると、メッセージを削除します
 - それ以外の例外を送出すると、メッセージを削除せずに残します。再配信が続けば、redrive policyでデッドレターキューへ移されます
-- Noneでも`(str, dict)`でもない値を返すと、`decoder`のバグとみなしてメッセージを削除せずに残します。壊れた`decoder`が正しいメッセージを消さないようにするためです
 
 ```python
 import json
@@ -111,13 +109,11 @@ from urllib.parse import unquote_plus
 
 from sqs_job_worker import NonRetryableError, SqsQueue
 
-def decode_s3_event(message: dict) -> tuple[str, dict] | None:
-    body = json.loads(message["Body"])
-    if body.get("Event") == "s3:TestEvent":
-        return None
-    if "Records" not in body:
+def decode_s3_event(body: str) -> tuple[str, dict]:
+    event = json.loads(body)
+    if "Records" not in event:  # e.g. the s3:TestEvent sent when notifications are configured
         raise NonRetryableError("not an S3 event notification")
-    keys = [unquote_plus(record["s3"]["object"]["key"]) for record in body["Records"]]
+    keys = [unquote_plus(record["s3"]["object"]["key"]) for record in event["Records"]]
     return "ingest_objects", {"keys": keys}
 
 queue = SqsQueue(url, boto_client=sqs, decoder=decode_s3_event)

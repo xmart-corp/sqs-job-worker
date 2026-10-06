@@ -17,9 +17,9 @@ class NonRetryableError(Exception):
     """Signal that retrying a job cannot succeed and its message should be deleted."""
 
 
-def _decode_envelope(message: dict) -> tuple[str, dict]:
+def _decode_envelope(body: str) -> tuple[str, dict]:
     try:
-        envelope = json.loads(message.get("Body", ""))
+        envelope = json.loads(body)
         job_type, payload = envelope["job_type"], envelope["payload"]
     except (ValueError, KeyError, TypeError, RecursionError) as e:
         raise NonRetryableError(f"failed to parse body: {e}") from e
@@ -56,21 +56,13 @@ class JobProcessor:
         correlation_fields, trace_headers = SqsMessageAttributes.parse(message)
         decode = queue.decoder or _decode_envelope
         try:
-            decoded = decode(message)
-            if decoded is None:
-                logger.info("deleting message: decoder found no job to process")
-                queue.delete_message(receipt_handle)
-                return
-            job_type, payload = decoded
-            # A malformed result is a decoder bug, not a bad message, so it must not delete the message.
-            if not isinstance(job_type, str) or not isinstance(payload, dict):
-                raise TypeError(f"decoder must return None or (str, dict), got {decoded!r}")
+            job_type, payload = decode(message.get("Body", ""))
         except NonRetryableError as e:
             logger.error(f"deleting message: {e}")
             queue.delete_message(receipt_handle)
             return
         except Exception as e:
-            logger.error(f"failed to decode message; leaving for redelivery: {e}", exc_info=True)
+            logger.error(f"failed to decode body; leaving for redelivery: {e}", exc_info=True)
             return
 
         if job_type not in self._handlers:

@@ -286,32 +286,24 @@ class QueueIntegrationTests(TestCase):
                 self.assertEqual(_remaining(client, url), [])
 
     def test_decoders_turn_foreign_bodies_into_jobs(self):
-        def decode_s3_event(message):
-            body = json.loads(message["Body"])
-            if body.get("Event") == "s3:TestEvent":
-                return None
-            if "Records" not in body:
+        def decode_s3_event(body):
+            event = json.loads(body)
+            if "Records" not in event:
                 raise NonRetryableError("not an S3 event notification")
-            return "ingest", {"keys": [record["s3"]["object"]["key"] for record in body["Records"]]}
+            return "ingest", {"keys": [record["s3"]["object"]["key"] for record in event["Records"]]}
 
-        def decode_without_dict_payload(message):
-            return "ingest", ["raw/mail-1"]
-
-        s3_event = json.dumps({"Records": [{"s3": {"object": {"key": "raw/mail-1"}}}]})
         cases = [
-            ("decoded", decode_s3_event, s3_event, [{"keys": ["raw/mail-1"]}], 0),
-            ("nothing to process", decode_s3_event, json.dumps({"Event": "s3:TestEvent"}), [], 0),
-            ("non-retryable", decode_s3_event, json.dumps({"unexpected": True}), [], 0),
-            ("decoder error", decode_s3_event, "not-json", [], 1),
-            ("malformed decoder result", decode_without_dict_payload, s3_event, [], 1),
+            ("decoded", json.dumps({"Records": [{"s3": {"object": {"key": "raw/mail-1"}}}]}), [{"keys": ["raw/mail-1"]}], 0),
+            ("non-retryable", json.dumps({"Event": "s3:TestEvent"}), [], 0),
+            ("decoder error", "not-json", [], 1),
         ]
 
-        for name, decoder, body, expected_calls, remaining_count in cases:
+        for name, body, expected_calls, remaining_count in cases:
             with self.subTest(name), mock_aws():
                 client = boto3.client("sqs", region_name=REGION)
                 url = _queue(client, "s3-events")
                 client.send_message(QueueUrl=url, MessageBody=body)
-                queue = SqsQueue(url, boto_client=client, visibility_timeout=0, decoder=decoder)
+                queue = SqsQueue(url, boto_client=client, visibility_timeout=0, decoder=decode_s3_event)
                 calls = []
 
                 _worker(QueueGroup({"s3": {"queue": queue}}), {"ingest": calls.append}).run()

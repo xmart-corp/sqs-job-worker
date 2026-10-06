@@ -97,12 +97,10 @@ queues.enqueue(
 ### Messages from other producers
 
 To consume messages that another service puts on a queue in its own format, such as S3 event notifications, give the `SqsQueue` a `decoder`.
-It receives the SQS message (`Body`, `MessageId`, and attributes) and returns `(job_type, payload)`.
+It receives the message body and returns `(job_type, payload)`.
 
-- Returning None deletes the message as having nothing to process
 - Raising `NonRetryableError` deletes the message
 - Raising any other exception leaves the message for redelivery, so the redrive policy eventually moves it to the dead-letter queue
-- Returning anything other than None or `(str, dict)` is treated as a decoder bug and also leaves the message for redelivery, so a broken decoder does not delete valid messages
 
 ```python
 import json
@@ -110,13 +108,11 @@ from urllib.parse import unquote_plus
 
 from sqs_job_worker import NonRetryableError, SqsQueue
 
-def decode_s3_event(message: dict) -> tuple[str, dict] | None:
-    body = json.loads(message["Body"])
-    if body.get("Event") == "s3:TestEvent":
-        return None
-    if "Records" not in body:
+def decode_s3_event(body: str) -> tuple[str, dict]:
+    event = json.loads(body)
+    if "Records" not in event:  # e.g. the s3:TestEvent sent when notifications are configured
         raise NonRetryableError("not an S3 event notification")
-    keys = [unquote_plus(record["s3"]["object"]["key"]) for record in body["Records"]]
+    keys = [unquote_plus(record["s3"]["object"]["key"]) for record in event["Records"]]
     return "ingest_objects", {"keys": keys}
 
 queue = SqsQueue(url, boto_client=sqs, decoder=decode_s3_event)
