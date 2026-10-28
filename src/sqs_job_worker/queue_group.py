@@ -125,12 +125,8 @@ class QueueGroup:
             worker.run()
             return
 
-        # A signal delivered to this thread interrupts the blocking call a handler is in, and some
-        # C extensions raise on EINTR instead of retrying (mysqlclient over TLS reports
-        # "Connection timed out"), failing the in-flight job. Block the signals here so a
-        # dedicated thread takes them; Python still runs request_stop on this thread once the
-        # call returns. The handlers stay installed: with SIG_DFL, delivery to a thread started
-        # earlier, which does not inherit this mask, would kill the process.
+        # Take the signals on another thread: EINTR here fails blocking calls in some C extensions (mysqlclient over TLS).
+        # Keep the handlers installed, since threads started before this do not inherit the mask.
         shutdown_signals = {signal.SIGTERM, signal.SIGINT}
         worker_returned = threading.Event()
 
