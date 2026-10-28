@@ -432,7 +432,7 @@ class RunnerIntegrationTests(TestCase):
 
         def handler(payload):
             threading.Timer(0.05, os.kill, (os.getpid(), signal.SIGTERM)).start()
-            # Python does not retry usleep() on EINTR, so a signal delivered to this thread makes it return -1.
+            # Python does not retry usleep() on EINTR; an interrupted call returns -1.
             results.append((libc.usleep(300_000), ctypes.get_errno()))
 
         with mock_aws():

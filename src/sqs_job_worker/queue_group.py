@@ -125,8 +125,8 @@ class QueueGroup:
             worker.run()
             return
 
-        # Take the signals on another thread: EINTR here fails blocking calls in some C extensions (mysqlclient over TLS).
-        # Keep the handlers installed, since threads started before this do not inherit the mask.
+        # Receive the signals on another thread: EINTR here fails blocking calls in some C extensions.
+        # Keep the signal handlers: threads started earlier lack the mask, and SIG_DFL would kill the process.
         shutdown_signals = {signal.SIGTERM, signal.SIGINT}
         worker_returned = threading.Event()
 
