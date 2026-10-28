@@ -1,5 +1,6 @@
 import random
 import signal
+import threading
 from collections.abc import Callable, Sequence
 
 import structlog
@@ -120,7 +121,30 @@ class QueueGroup:
 
         signal.signal(signal.SIGTERM, request_stop)
         signal.signal(signal.SIGINT, request_stop)
-        worker.run()
+        if not hasattr(signal, "pthread_sigmask"):  # Windows
+            worker.run()
+            return
+
+        # A signal delivered to this thread interrupts the blocking call a handler is in, and some
+        # C extensions raise on EINTR instead of retrying (mysqlclient over TLS reports
+        # "Connection timed out"), failing the in-flight job. Block the signals here so a
+        # dedicated thread takes them; Python still runs request_stop on this thread once the
+        # call returns. The handlers stay installed: with SIG_DFL, delivery to a thread started
+        # earlier, which does not inherit this mask, would kill the process.
+        shutdown_signals = {signal.SIGTERM, signal.SIGINT}
+        worker_returned = threading.Event()
+
+        def receive_signals():
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, shutdown_signals)
+            worker_returned.wait()
+
+        previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
+        threading.Thread(target=receive_signals, name="signal-receiver", daemon=True).start()
+        try:
+            worker.run()
+        finally:
+            worker_returned.set()
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 
     @classmethod
     def build(cls, *, boto_client, queues: dict[str, dict[str, object]], middleware: Sequence[JobMiddleware] = ()) -> "QueueGroup":
