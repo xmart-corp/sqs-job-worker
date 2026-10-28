@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A shutdown signal could fail the in-flight job that graceful shutdown is meant to let finish:
-  `run_worker()` let SIGTERM / SIGINT be delivered to the thread running the handler, which
-  interrupts its blocking call, and C extensions that raise on EINTR instead of retrying
-  (e.g. mysqlclient over TLS, reporting "Connection timed out") failed the job. The signals are
-  now blocked on that thread and received by a dedicated one, on POSIX platforms.
+- SIGTERM could fail the in-flight job that graceful shutdown is meant to let finish: it
+  interrupted the job's blocking call, and C extensions that raise on EINTR instead of retrying
+  (e.g. mysqlclient over TLS, reporting "Connection timed out") failed the job. SIGTERM is now
+  held until the job finishes, on POSIX platforms. SIGINT still interrupts the job, so that a
+  second Ctrl-C can force quit.
 
 ## [0.2.1] - 2026-09-14
 

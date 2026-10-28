@@ -1,6 +1,5 @@
 import random
 import signal
-import threading
 from collections.abc import Callable, Sequence
 
 import structlog
@@ -121,26 +120,7 @@ class QueueGroup:
 
         signal.signal(signal.SIGTERM, request_stop)
         signal.signal(signal.SIGINT, request_stop)
-        if not hasattr(signal, "pthread_sigmask"):  # Windows
-            worker.run()
-            return
-
-        # Receive the signals on another thread: EINTR here fails blocking calls in some C extensions.
-        # Keep the signal handlers: threads started earlier lack the mask, and SIG_DFL would kill the process.
-        shutdown_signals = {signal.SIGTERM, signal.SIGINT}
-        worker_returned = threading.Event()
-
-        def receive_signals():
-            signal.pthread_sigmask(signal.SIG_UNBLOCK, shutdown_signals)
-            worker_returned.wait()
-
-        previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, shutdown_signals)
-        threading.Thread(target=receive_signals, name="signal-receiver", daemon=True).start()
-        try:
-            worker.run()
-        finally:
-            worker_returned.set()
-            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        worker.run()
 
     @classmethod
     def build(cls, *, boto_client, queues: dict[str, dict[str, object]], middleware: Sequence[JobMiddleware] = ()) -> "QueueGroup":

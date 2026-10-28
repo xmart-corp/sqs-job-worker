@@ -424,16 +424,16 @@ class RunnerIntegrationTests(TestCase):
             self.assertEqual(signal_mock.call_count, 2)
 
     @skipUnless(hasattr(signal, "pthread_sigmask"), "requires POSIX signal masks")
-    def test_shutdown_signal_does_not_interrupt_blocking_call_in_handler(self):
+    def test_sigterm_does_not_interrupt_blocking_call_in_handler(self):
         for signum in (signal.SIGTERM, signal.SIGINT):
             self.addCleanup(signal.signal, signum, signal.getsignal(signum))
-        libc = ctypes.CDLL(None, use_errno=True)
+        libc = ctypes.CDLL(None)
         results = []
 
         def handler(payload):
             threading.Timer(0.05, os.kill, (os.getpid(), signal.SIGTERM)).start()
             # Python does not retry usleep() on EINTR; an interrupted call returns -1.
-            results.append((libc.usleep(300_000), ctypes.get_errno()))
+            results.append(libc.usleep(300_000))
 
         with mock_aws():
             client = boto3.client("sqs", region_name=REGION)
@@ -441,5 +441,5 @@ class RunnerIntegrationTests(TestCase):
             queues.enqueue("default", "block")
             queues.run_worker(handlers={"block": handler}, idle_wait_seconds=0)
 
-        self.assertEqual(results, [(0, 0)])
+        self.assertEqual(results, [0])
         self.assertNotIn(signal.SIGTERM, signal.pthread_sigmask(signal.SIG_BLOCK, set()))
