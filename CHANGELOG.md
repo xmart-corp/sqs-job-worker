@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-29
+
+### Fixed
+
+- SIGTERM could fail the in-flight job that graceful shutdown is meant to let finish: it
+  interrupted the job's blocking call, and C extensions that raise on EINTR instead of retrying
+  (e.g. mysqlclient over TLS, reporting "Connection timed out") failed the job. SIGTERM is now
+  held until the job finishes, on POSIX platforms. SIGINT still interrupts the job, so that a
+  second Ctrl-C can force quit.
+
 ## [0.2.1] - 2026-09-14
 
 ### Fixed
@@ -60,7 +70,8 @@ Initial release.
 - Distributed tracing via opaque trace headers in message attributes: New Relic, Sentry,
   and OpenTelemetry middleware in `contrib` propagate on the producer and measure on the consumer.
 
-[Unreleased]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/xmart-corp/sqs-job-worker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/xmart-corp/sqs-job-worker/releases/tag/v0.1.0

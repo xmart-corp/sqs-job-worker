@@ -1,4 +1,5 @@
 import random
+import signal
 import time
 from collections.abc import Callable
 
@@ -75,10 +76,14 @@ class JobWorker:
                 if receipt_handle is not None:
                     queue.release_message(receipt_handle)
                 return True
+            previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM}) if hasattr(signal, "pthread_sigmask") else None
             try:
                 self._processor.process(queue_name, queue, message)
             except Exception as e:
                 logger.error(f"unexpected error while processing message: {e}", exc_info=True)
+            finally:
+                if previous_mask is not None:
+                    signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
             self._attempted += 1
         return True
 

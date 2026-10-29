@@ -145,7 +145,8 @@ queues = QueueGroup({"heavy": {"queue": heavy, "weight": 1}})
 ## Graceful shutdown
 
 On SIGTERM / SIGINT, `run_worker()` stops receiving new messages, finishes the in-flight job, then exits.
-A second signal exits immediately.
+SIGTERM is held until the job finishes so that it cannot interrupt the job's blocking calls; use it as the container's stop signal.
+A second SIGINT (Ctrl-C) exits immediately.
 Messages received after the stop request are not processed; their visibility timeout is reset to 0 so they become available for redelivery right away.
 
 If receive errors persist, the worker retries with jittered exponential backoff capped at 30 seconds. After 10 consecutive failures it exits with code 1, leaving the restart to the supervisor.
