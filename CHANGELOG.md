@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SIGTERM could fail the in-flight job that graceful shutdown is meant to let finish: it
+  interrupted the job's blocking call, and C extensions that raise on EINTR instead of retrying
+  (e.g. mysqlclient over TLS, reporting "Connection timed out") failed the job. SIGTERM is now
+  held until the job finishes, on POSIX platforms. SIGINT still interrupts the job, so that a
+  second Ctrl-C can force quit.
+
 ## [0.2.1] - 2026-09-14
 
 ### Fixed
